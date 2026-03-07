@@ -1,0 +1,31 @@
+{
+  "name": "my-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "canvas": "^3.2.0",
+    "dotenv": "^17.2.1",
+    "fontkit": "^2.0.4",
+    "next": "^16.1.6",
+    "node-fetch": "^3.3.2",
+    "node-telegram-bot": "^0.1.9",
+    "node-telegram-bot-api": "^0.67.0",
+    "papaparse": "^5.5.3",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "eslint": "^9",
+    "eslint-config-next": "15.4.7",
+    "tailwindcss": "^4"
+  },
+  "type": "module"
+}
