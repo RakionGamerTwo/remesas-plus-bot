@@ -7,15 +7,20 @@ import { createImageWithRatesEEUU } from "../../../lib/processorEEUU";
 import { createImageWithRatesEspana } from "../../../lib/processorEspana";
 import { createImageWithRatesPanama } from "../../../lib/processorPanama";
 import { createImageWithRatesMexico } from "../../../lib/processorMexico";
+import { createImageWithRatesBrasil} from "../../../lib/processorBrasil";
+import { createImageWithRatesVenezuela } from "../../../lib/processorVenezuela";
+
 
 const IMAGE_PROCESSORS = [
   { key: 'chile', processor: createImageWithRatesChile },
+  { key: 'venezuela', processor: createImageWithRatesVenezuela },
   { key: 'peru', processor: createImageWithRatesPeru },
   { key: 'colombia', processor: createImageWithRatesColombia },
   { key: 'eeuu', processor: createImageWithRatesEEUU },
   { key: 'espana', processor: createImageWithRatesEspana },
   { key: 'panama', processor: createImageWithRatesPanama },
   { key: 'mexico', processor: createImageWithRatesMexico },
+  { key: 'brasil', processor: createImageWithRatesBrasil },
 ];
 
 const PERSISTENT_KEYBOARD = {
@@ -83,6 +88,8 @@ Sigue estos pasos rápidos:
         espana: rawRates["España"] || rawRates["españa"],
         panama: rawRates["Panamá"] || rawRates["Panama"],
         mexico: rawRates["Mexico"] || rawRates["México"] || rawRates["MEXICO"],
+        brasil: rawRates["Brasil"] || rawRates["brasil"],
+        venezuela: rawRates["Venezuela"] || rawRates["venezuela"],
       };
 
       if (Object.values(rates).every(val => !val || Object.keys(val).length === 0)) {
