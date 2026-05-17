@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@vercel/functions": "^1.5.0",
     "canvas": "^3.2.0",
     "dotenv": "^17.2.1",
     "fontkit": "^2.0.4",
