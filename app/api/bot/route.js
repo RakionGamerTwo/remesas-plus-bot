@@ -9,7 +9,10 @@ import { createImageWithRatesPanama } from "../../../lib/processorPanama";
 import { createImageWithRatesMexico } from "../../../lib/processorMexico";
 import { createImageWithRatesBrasil} from "../../../lib/processorBrasil";
 import { createImageWithRatesVenezuela } from "../../../lib/processorVenezuela";
+import { waitUntil } from "@vercel/functions";
 
+// Extender el límite de tiempo de ejecución de Vercel (máximo 60s en Hobby)
+export const maxDuration = 60;
 
 const IMAGE_PROCESSORS = [
   { key: 'chile', processor: createImageWithRatesChile },
@@ -48,13 +51,17 @@ export async function POST(req) {
   try {
     const update = await req.json();
 
-    const chatId =
-      update.message?.chat?.id || update.callback_query?.message?.chat?.id;
+    const chatId = update.message?.chat?.id || update.callback_query?.message?.chat?.id;
     const text = (update.message?.text || "").trim();
     const callbackData = update.callback_query?.data;
 
+    // Responder al callback query INMEDIATAMENTE para evitar el error ETELEGRAM
     if (update.callback_query) {
-      await bot.answerCallbackQuery(update.callback_query.id);
+      try {
+        await bot.answerCallbackQuery(update.callback_query.id);
+      } catch (error) {
+        console.warn("Callback query expirado o inválido:", error.message);
+      }
     }
 
     const WELCOME_MESSAGE = `🚀 ¡Hola! Soy PlusRateBot. Estoy listo para generar tus imágenes.
@@ -78,61 +85,75 @@ Sigue estos pasos rápidos:
         "⏳Procesando imágenes... Esto puede durar máximo 1 minuto"
       );
 
-      const rawRates = await getRates();
-
-      const rates = {
-        chile: rawRates["Chile"] || rawRates["CHILE"],
-        peru: rawRates["Perú"] || rawRates["Peru"] || rawRates["PERU"],
-        colombia: rawRates["Colombia"] || rawRates["COLOMBIA"],
-        eeuu: rawRates["EEUU"] || rawRates["eeuu"],
-        espana: rawRates["España"] || rawRates["españa"],
-        panama: rawRates["Panamá"] || rawRates["Panama"],
-        mexico: rawRates["Mexico"] || rawRates["México"] || rawRates["MEXICO"],
-        brasil: rawRates["Brasil"] || rawRates["brasil"],
-        venezuela: rawRates["Venezuela"] || rawRates["venezuela"],
-      };
-
-      if (Object.values(rates).every(val => !val || Object.keys(val).length === 0)) {
-        await bot.editMessageText("No encontré tasas disponibles en este momento", {
-          chat_id: chatId,
-          message_id: processingMsg.message_id,
-        });
-        return new Response("ok", { status: 200 });
-      }
-
-      const imagePromises = IMAGE_PROCESSORS
-        .filter(({ key }) => rates[key] && Object.keys(rates[key]).length > 0)
-        .map(async ({ key, processor }) => {
+      // Usar waitUntil para ejecutar la generación de imágenes en segundo plano
+      waitUntil(
+        (async () => {
           try {
-            const buffer = await processor(rates[key]);
-            return { buffer };
-          } catch (error) {
-            console.error(`Error procesando ${key}:`, error);
-            return null;
+            const rawRates = await getRates();
+
+            const rates = {
+              chile: rawRates["Chile"] || rawRates["CHILE"],
+              peru: rawRates["Perú"] || rawRates["Peru"] || rawRates["PERU"],
+              colombia: rawRates["Colombia"] || rawRates["COLOMBIA"],
+              eeuu: rawRates["EEUU"] || rawRates["eeuu"],
+              espana: rawRates["España"] || rawRates["españa"],
+              panama: rawRates["Panamá"] || rawRates["Panama"],
+              mexico: rawRates["Mexico"] || rawRates["México"] || rawRates["MEXICO"],
+              brasil: rawRates["Brasil"] || rawRates["brasil"],
+              venezuela: rawRates["Venezuela"] || rawRates["venezuela"],
+            };
+
+            if (Object.values(rates).every(val => !val || Object.keys(val).length === 0)) {
+              await bot.editMessageText("No encontré tasas disponibles en este momento", {
+                chat_id: chatId,
+                message_id: processingMsg.message_id,
+              });
+              return;
+            }
+
+            const imagePromises = IMAGE_PROCESSORS
+              .filter(({ key }) => rates[key] && Object.keys(rates[key]).length > 0)
+              .map(async ({ key, processor }) => {
+                try {
+                  const buffer = await processor(rates[key]);
+                  return { buffer };
+                } catch (error) {
+                  console.error(`Error procesando ${key}:`, error);
+                  return null;
+                }
+              });
+
+            const images = (await Promise.all(imagePromises)).filter(Boolean);
+
+            if (images.length === 0) {
+              await bot.sendMessage(
+                chatId,
+                "No se pudieron generar imágenes en este momento",
+                PERSISTENT_KEYBOARD
+              );
+              return;
+            }
+
+            for (let i = 0; i < images.length; i++) {
+              const img = images[i];
+              const isLast = i === images.length - 1;
+
+              await bot.sendPhoto(chatId, img.buffer, {
+                caption: img.caption,
+                reply_markup: isLast ? UPDATE_BUTTON.reply_markup : undefined,
+              });
+            }
+          } catch (bgError) {
+            console.error("Error crítico en el proceso de fondo:", bgError);
+            await bot.sendMessage(
+              chatId,
+              "Ocurrió un error inesperado al procesar las tasas. Intenta nuevamente."
+            );
           }
-        });
+        })()
+      );
 
-      const images = (await Promise.all(imagePromises)).filter(Boolean);
-
-      if (images.length === 0) {
-        await bot.sendMessage(
-          chatId,
-          "No se pudieron generar imágenes en este momento",
-          PERSISTENT_KEYBOARD
-        );
-        return new Response("ok", { status: 200 });
-      }
-
-      for (let i = 0; i < images.length; i++) {
-        const img = images[i];
-        const isLast = i === images.length - 1;
-
-        await bot.sendPhoto(chatId, img.buffer, {
-          caption: img.caption,
-          reply_markup: isLast ? UPDATE_BUTTON.reply_markup : undefined,
-        });
-      }
-
+      // Retornar 200 OK de inmediato para que Telegram detenga los reintentos
       return new Response("ok", { status: 200 });
     }
 
