@@ -11,7 +11,6 @@ import { createImageWithRatesBrasil} from "../../../lib/processorBrasil";
 import { createImageWithRatesVenezuela } from "../../../lib/processorVenezuela";
 import { waitUntil } from "@vercel/functions";
 
-// Extender el límite de tiempo de ejecución de Vercel (máximo 60s en Hobby)
 export const maxDuration = 60;
 
 const IMAGE_PROCESSORS = [
@@ -34,58 +33,40 @@ const PERSISTENT_KEYBOARD = {
   },
 };
 
-const UPDATE_BUTTON = {
-  reply_markup: {
-    inline_keyboard: [
-      [
-        {
-          text: "Actualizar Tasas🔄",
-          callback_data: "update_all",
-        },
-      ],
-    ],
-  },
-};
-
 export async function POST(req) {
   try {
     const update = await req.json();
 
-    const chatId = update.message?.chat?.id || update.callback_query?.message?.chat?.id;
+    const chatId = update.message?.chat?.id;
     const text = (update.message?.text || "").trim();
-    const callbackData = update.callback_query?.data;
 
-    // Responder al callback query INMEDIATAMENTE para evitar el error ETELEGRAM
-    if (update.callback_query) {
-      try {
-        await bot.answerCallbackQuery(update.callback_query.id);
-      } catch (error) {
-        console.warn("Callback query expirado o inválido:", error.message);
-      }
+    // Si no hay un chat ID válido, ignoramos la petición
+    if (!chatId) {
+      return new Response("ok", { status: 200 });
     }
 
     const WELCOME_MESSAGE = `🚀 ¡Hola! Soy PlusRateBot. Estoy listo para generar tus imágenes.
 
 Sigue estos pasos rápidos:
 
-1️⃣ Toca el botón [Generar Tasas💸] en tu menú.
-2️⃣ Dame 60 segundos para procesar los diseños.
-3️⃣ Recibirás tus imágenes con los valores actualizados al instante.
+1️⃣ Escribe cualquier cosa (un punto, una letra) o toca el botón [Generar Tasas💸].
+2️⃣ Dame hasta 60 segundos para procesar los diseños.
+3️⃣ Recibirás tus imágenes con los valores actualizados al instante.`;
 
-🔄¿Cambiaron los valores? Solo presiona Actualizar Tasas o vuelve a darle a Generar Tasas para sincronizar los datos al instante.`;
-
-    if (text === "/start" || text === "start" || text === req.body) {
+    // Manejar el comando de inicio
+    if (text === "/start" || text === "start") {
       await bot.sendMessage(chatId, WELCOME_MESSAGE, PERSISTENT_KEYBOARD);
       return new Response("ok", { status: 200 });
     }
 
-    if (callbackData === "update_all" || text === "Generar Tasas💸") {
+    // Si el usuario escribe CUALQUIER COSA (que no sea /start)
+    if (text) {
       const processingMsg = await bot.sendMessage(
         chatId,
-        "⏳Procesando imágenes... Esto puede durar máximo 1 minuto"
+        "⏳ Procesando imágenes... Esto puede durar máximo 1 minuto",
+        PERSISTENT_KEYBOARD
       );
 
-      // Usar waitUntil para ejecutar la generación de imágenes en segundo plano
       waitUntil(
         (async () => {
           try {
@@ -104,7 +85,7 @@ Sigue estos pasos rápidos:
             };
 
             if (Object.values(rates).every(val => !val || Object.keys(val).length === 0)) {
-              await bot.editMessageText("No encontré tasas disponibles en este momento", {
+              await bot.editMessageText("No encontré tasas disponibles en este momento.", {
                 chat_id: chatId,
                 message_id: processingMsg.message_id,
               });
@@ -128,32 +109,28 @@ Sigue estos pasos rápidos:
             if (images.length === 0) {
               await bot.sendMessage(
                 chatId,
-                "No se pudieron generar imágenes en este momento",
-                PERSISTENT_KEYBOARD
+                "No se pudieron generar imágenes en este momento."
               );
               return;
             }
 
+            // Enviar las imágenes una por una
             for (let i = 0; i < images.length; i++) {
               const img = images[i];
-              const isLast = i === images.length - 1;
-
               await bot.sendPhoto(chatId, img.buffer, {
                 caption: img.caption,
-                reply_markup: isLast ? UPDATE_BUTTON.reply_markup : undefined,
               });
             }
           } catch (bgError) {
             console.error("Error crítico en el proceso de fondo:", bgError);
             await bot.sendMessage(
               chatId,
-              "Ocurrió un error inesperado al procesar las tasas. Intenta nuevamente."
+              "Ocurrió un error inesperado al procesar las tasas. Intenta nuevamente escribiendo cualquier cosa."
             );
           }
         })()
       );
 
-      // Retornar 200 OK de inmediato para que Telegram detenga los reintentos
       return new Response("ok", { status: 200 });
     }
 
